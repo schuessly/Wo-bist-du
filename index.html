@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Wo ist</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#08080f" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --bg:        #08080f;
+      --bg2:       #0f0f1a;
+      --glass:     rgba(255,255,255,0.06);
+      --glass2:    rgba(255,255,255,0.10);
+      --glass3:    rgba(255,255,255,0.04);
+      --border:    rgba(255,255,255,0.10);
+      --border2:   rgba(255,255,255,0.06);
+      --accent:    #3b82f6;
+      --accent2:   #6366f1;
+      --grad:      linear-gradient(135deg, #3b82f6, #6366f1);
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --yellow:    #eab308;
+      --text:      #ffffff;
+      --text2:     rgba(255,255,255,0.7);
+      --text3:     rgba(255,255,255,0.35);
+      --text4:     rgba(255,255,255,0.18);
+      --radius:    18px;
+      --radius-sm: 12px;
+      --blur:      blur(24px) saturate(180%);
+      --shadow:    0 8px 32px rgba(0,0,0,0.6);
+      --shadow-sm: 0 2px 12px rgba(0,0,0,0.4);
+    }
+
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ══════════════════════════════════════
+       MAP
+    ══════════════════════════════════════ */
+    #map {
+      position: fixed; inset: 0; z-index: 0;
+    }
+    .leaflet-tile {
+      filter: brightness(0.7) saturate(0.6) contrast(1.1);
+    }
+    .leaflet-control-zoom {
+      border: none !important;
+      box-shadow: var(--shadow-sm) !important;
+    }
+    .leaflet-control-zoom a {
+      background: rgba(15,15,26,0.85) !important;
+      backdrop-filter: var(--blur) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 10px !important;
+      width: 34px !important; height: 34px !important;
+      line-height: 34px !important; font-size: 16px !important;
+      margin-bottom: 4px !important;
+    }
+    .leaflet-control-zoom a:hover { background: var(--glass2) !important; }
+
+    /* ══════════════════════════════════════
+       GRADIENT OVERLAYS
+    ══════════════════════════════════════ */
+    .map-vignette-top {
+      position: fixed; top: 0; left: 0; right: 0; height: 200px;
+      background: linear-gradient(to bottom, rgba(8,8,15,0.92) 0%, transparent 100%);
+      z-index: 5; pointer-events: none;
+    }
+    .map-vignette-bot {
+      position: fixed; bottom: 0; left: 0; right: 0; height: 280px;
+      background: linear-gradient(to top, rgba(8,8,15,0.95) 0%, transparent 100%);
+      z-index: 5; pointer-events: none;
+    }
+
+    /* ══════════════════════════════════════
+       HEADER
+    ══════════════════════════════════════ */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: env(safe-area-inset-top, 44px) 20px 0;
+      display: none;
+    }
+    .header-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 0 10px;
+    }
+    #header h1 {
+      font-size: 30px; font-weight: 800;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #fff 30%, rgba(255,255,255,0.6));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .header-actions { display: flex; gap: 10px; }
+    .icon-btn {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: var(--glass2);
+      backdrop-filter: var(--blur);
+      border: 1px solid var(--border);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: var(--accent); font-size: 17px;
+      transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .icon-btn:hover { background: var(--glass3); transform: scale(1.08); }
+    .icon-btn:active { transform: scale(0.93); }
+
+    /* ══════════════════════════════════════
+       BOTTOM PANEL
+    ══════════════════════════════════════ */
+    #panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+      display: none;
+      background: rgba(10,10,18,0.88);
+      backdrop-filter: var(--blur);
+      border-top: 1px solid var(--border);
+      border-radius: 26px 26px 0 0;
+      max-height: 52vh;
+      overflow: hidden;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+    }
+    #panel-scroll { overflow-y: auto; max-height: calc(52vh - 90px); }
+    #panel-handle {
+      width: 40px; height: 4px; border-radius: 2px;
+      background: var(--text4);
+      margin: 12px auto 0;
+    }
+    #panel-tabs {
+      display: flex; padding: 8px 16px 0;
+      border-bottom: 1px solid var(--border2);
+    }
+    .tab-btn {
+      flex: 1; padding: 9px 8px; background: none; border: none;
+      color: var(--text3); font-size: 13px; font-weight: 600;
+      cursor: pointer; position: relative;
+      transition: color 0.2s; letter-spacing: 0.2px;
+    }
+    .tab-btn.active { color: var(--accent); }
+    .tab-btn.active::after {
+      content: ''; position: absolute; bottom: -1px; left: 15%; right: 15%;
+      height: 2px;
+      background: var(--grad);
+      border-radius: 1px;
+    }
+
+    /* ══════════════════════════════════════
+       PERSON CARD
+    ══════════════════════════════════════ */
+    .person-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 20px;
+      cursor: pointer;
+      transition: background 0.15s;
+      border-bottom: 1px solid var(--border2);
+      position: relative;
+    }
+    .person-card::after {
+      content: ''; position: absolute; inset: 0;
+      background: var(--glass3); opacity: 0;
+      transition: opacity 0.15s; border-radius: 0;
+    }
+    .person-card:active::after { opacity: 1; }
+
+    .avatar-wrap { position: relative; flex-shrink: 0; }
+    .avatar {
+      width: 48px; height: 48px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; color: #fff;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .status-dot {
+      width: 13px; height: 13px; border-radius: 50%;
+      border: 2.5px solid rgba(10,10,18,0.9);
+      position: absolute; bottom: 0; right: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.online  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .status-dot.offline { background: var(--text4); }
+
+    .person-info { flex: 1; min-width: 0; }
+    .person-name { font-size: 15px; font-weight: 600; margin-bottom: 3px; letter-spacing: -0.2px; }
+    .person-address {
+      font-size: 12px; color: var(--text3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .person-meta { text-align: right; flex-shrink: 0; }
+    .person-time { font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+    .battery-pill {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: var(--glass); border: 1px solid var(--border2);
+      border-radius: 20px; padding: 2px 8px;
+      font-size: 11px; font-weight: 500; color: var(--text3);
+    }
+    .battery-pill.low  { color: var(--red); border-color: rgba(239,68,68,0.3); }
+    .battery-pill.mid  { color: var(--yellow); border-color: rgba(234,179,8,0.3); }
+    .battery-pill.full { color: var(--green); border-color: rgba(34,197,94,0.3); }
+
+    /* ══════════════════════════════════════
+       EMPTY STATE
+    ══════════════════════════════════════ */
+    .empty-state {
+      padding: 36px 20px; text-align: center;
+      color: var(--text3); font-size: 14px; line-height: 1.7;
+    }
+    .empty-state .e-icon { font-size: 38px; margin-bottom: 10px; opacity: 0.5; }
+
+    /* ══════════════════════════════════════
+       DETAIL PANEL (slide-up)
+    ══════════════════════════════════════ */
+    #detail-backdrop {
+      position: fixed; inset: 0; z-index: 199;
+      background: rgba(0,0,0,0); display: none;
+      transition: background 0.3s;
+    }
+    #detail-backdrop.open { display: block; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); }
+
+    #detail-panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+      background: rgba(12,12,22,0.96);
+      backdrop-filter: var(--blur);
+      border-top: 1px solid var(--border);
+      border-radius: 26px 26px 0 0;
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+      box-shadow: 0 -12px 60px rgba(0,0,0,0.7);
+      display: none;
+      transform: translateY(100%);
+      transition: transform 0.4s cubic-bezier(0.32,0.72,0,1);
+    }
+    #detail-panel.open { display: block; transform: translateY(0); }
+
+    .dp-handle {
+      width: 40px; height: 4px; border-radius: 2px;
+      background: var(--text4); margin: 12px auto 0;
+    }
+    #detail-close {
+      position: absolute; top: 14px; right: 16px;
+      background: var(--glass2); border: 1px solid var(--border);
+      backdrop-filter: var(--blur);
+      color: var(--text2); border-radius: 50%;
+      width: 30px; height: 30px; font-size: 13px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+    }
+    #detail-close:hover { background: var(--glass3); }
+    #detail-close:active { transform: scale(0.9); }
+
+    #detail-content { padding: 18px 20px 20px; overflow-y: auto; max-height: 75vh; }
+
+    .dp-header {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 22px;
+    }
+    .dp-avatar {
+      width: 62px; height: 62px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 700; color: #fff;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+      flex-shrink: 0;
+    }
+    .dp-name { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .dp-status { font-size: 13px; color: var(--text3); margin-top: 3px; display: flex; align-items: center; gap: 5px; }
+    .dp-status-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .dp-status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dp-status-dot.offline { background: var(--text4); }
+
+    .dp-section { margin-bottom: 16px; }
+    .dp-section-label {
+      font-size: 11px; font-weight: 700; color: var(--text3);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      margin-bottom: 8px; padding: 0 4px;
+    }
+    .dp-card {
+      background: var(--glass);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .dp-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .dp-row:last-child { border-bottom: none; }
+    .dp-row-icon {
+      width: 34px; height: 34px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; flex-shrink: 0;
+    }
+    .dp-row-body { flex: 1; }
+    .dp-row-label { font-size: 11px; color: var(--text3); margin-bottom: 2px; }
+    .dp-row-value { font-size: 14px; font-weight: 500; }
+
+    .dp-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .dp-btn {
+      flex: 1; padding: 14px;
+      border: none; border-radius: var(--radius);
+      font-size: 15px; font-weight: 600; cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .dp-btn:active { transform: scale(0.96); }
+    .dp-btn.primary {
+      background: var(--grad);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(59,130,246,0.35);
+    }
+    .dp-btn.secondary {
+      background: var(--glass2); border: 1px solid var(--border);
+      color: var(--text2);
+    }
+
+    /* ══════════════════════════════════════
+       SETUP SCREEN
+    ══════════════════════════════════════ */
+    #setup-screen {
+      position: fixed; inset: 0; z-index: 300;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 40px 28px;
+      overflow: hidden;
+    }
+
+    /* Animated glow orb */
+    .glow-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      animation: orb-pulse 6s ease-in-out infinite;
+    }
+    .glow-orb-1 {
+      width: 320px; height: 320px;
+      background: radial-gradient(circle, rgba(59,130,246,0.35) 0%, transparent 70%);
+      top: -100px; left: -80px;
+      animation-delay: 0s;
+    }
+    .glow-orb-2 {
+      width: 280px; height: 280px;
+      background: radial-gradient(circle, rgba(99,102,241,0.3) 0%, transparent 70%);
+      bottom: -60px; right: -60px;
+      animation-delay: -3s;
+    }
+    @keyframes orb-pulse {
+      0%, 100% { transform: scale(1) translate(0,0); opacity: 0.7; }
+      50%       { transform: scale(1.15) translate(10px, 15px); opacity: 1; }
+    }
+
+    .setup-icon-wrap {
+      position: relative; margin-bottom: 28px;
+    }
+    .setup-icon-bg {
+      width: 96px; height: 96px; border-radius: 28px;
+      background: var(--grad);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 46px;
+      box-shadow: 0 8px 40px rgba(59,130,246,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+      animation: icon-float 3s ease-in-out infinite;
+    }
+    @keyframes icon-float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-6px); }
+    }
+
+    .setup-title {
+      font-size: 36px; font-weight: 800; letter-spacing: -1.5px;
+      text-align: center; margin-bottom: 10px;
+      background: linear-gradient(135deg, #fff 40%, rgba(255,255,255,0.55));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .setup-sub {
+      font-size: 15px; color: var(--text3); text-align: center;
+      line-height: 1.6; margin-bottom: 44px; max-width: 280px;
+    }
+
+    .big-btn {
+      width: 100%; max-width: 360px; padding: 17px 24px;
+      border: none; border-radius: var(--radius);
+      font-size: 16px; font-weight: 700; cursor: pointer;
+      margin-bottom: 12px; position: relative; overflow: hidden;
+      transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1);
+      letter-spacing: -0.2px;
+    }
+    .big-btn:active { transform: scale(0.96); }
+    .big-btn.primary {
+      background: var(--grad); color: #fff;
+      box-shadow: 0 6px 30px rgba(59,130,246,0.45);
+    }
+    .big-btn.primary::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+    }
+    .big-btn.secondary {
+      background: var(--glass2);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      backdrop-filter: var(--blur);
+    }
+
+    /* ══════════════════════════════════════
+       SHARE SCREEN
+    ══════════════════════════════════════ */
+    #share-screen {
+      position: fixed; inset: 0; z-index: 300;
+      background: var(--bg);
+      display: none; flex-direction: column;
+      align-items: center;
+      padding: env(safe-area-inset-top, 52px) 24px 40px;
+      overflow-y: auto;
+    }
+    #share-screen.open { display: flex; animation: slide-up 0.35s cubic-bezier(0.32,0.72,0,1); }
+    @keyframes slide-up {
+      from { transform: translateY(40px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .screen-back {
+      align-self: flex-start; margin-bottom: 24px;
+      background: none; border: none; color: var(--accent);
+      font-size: 15px; font-weight: 500; cursor: pointer;
+      display: flex; align-items: center; gap: 4px;
+      transition: opacity 0.15s;
+    }
+    .screen-back:active { opacity: 0.6; }
+
+    .share-title { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-bottom: 6px; }
+    .share-sub { font-size: 14px; color: var(--text3); text-align: center; margin-bottom: 28px; }
+
+    #my-name-input {
+      width: 100%; max-width: 360px; padding: 15px 18px;
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text);
+      font-size: 16px; font-weight: 500; outline: none;
+      margin-bottom: 20px;
+      transition: border-color 0.2s;
+      backdrop-filter: var(--blur);
+    }
+    #my-name-input::placeholder { color: var(--text3); }
+    #my-name-input:focus { border-color: rgba(59,130,246,0.6); }
+
+    .qr-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 20px;
+      margin-bottom: 20px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow);
+      width: 100%; max-width: 360px;
+    }
+    #qr-box {
+      background: #fff; border-radius: 16px; padding: 14px;
+      width: 172px; height: 172px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
+    .room-code-display {
+      font-size: 30px; font-weight: 800; letter-spacing: 10px;
+      background: var(--grad);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .room-code-label { font-size: 11px; color: var(--text3); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+
+    .link-box {
+      width: 100%; max-width: 360px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px 16px;
+      font-size: 12px; color: var(--text3);
+      word-break: break-all; margin-bottom: 12px;
+    }
+
+    /* ══════════════════════════════════════
+       JOIN SCREEN
+    ══════════════════════════════════════ */
+    #join-screen {
+      position: fixed; inset: 0; z-index: 300;
+      background: var(--bg);
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: env(safe-area-inset-top, 52px) 28px 40px;
+      overflow: hidden;
+    }
+    #join-screen.open { display: flex; animation: slide-up 0.35s cubic-bezier(0.32,0.72,0,1); }
+
+    .join-back {
+      position: absolute; top: calc(env(safe-area-inset-top, 44px) + 12px); left: 20px;
+      background: none; border: none; color: var(--accent);
+      font-size: 15px; font-weight: 500; cursor: pointer;
+    }
+    #join-screen h2 { font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+    #join-screen p { font-size: 14px; color: var(--text3); text-align: center; margin-bottom: 36px; }
+
+    #code-input {
+      width: 100%; max-width: 360px; padding: 20px;
+      text-align: center;
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text);
+      font-size: 30px; font-weight: 800; letter-spacing: 10px;
+      outline: none; margin-bottom: 16px; text-transform: uppercase;
+      transition: border-color 0.2s;
+    }
+    #code-input::placeholder { color: var(--text4); font-size: 20px; letter-spacing: 3px; font-weight: 500; }
+    #code-input:focus { border-color: rgba(59,130,246,0.5); }
+
+    /* ══════════════════════════════════════
+       MY STATUS TAB
+    ══════════════════════════════════════ */
+    #tab-me { padding: 12px 16px; }
+    .my-stat-card {
+      background: var(--glass);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 10px;
+    }
+    .my-stat-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .my-stat-row:last-child { border-bottom: none; }
+    .my-stat-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center; font-size: 15px;
+    }
+    .my-stat-label { font-size: 11px; color: var(--text3); margin-bottom: 2px; }
+    .my-stat-value { font-size: 14px; font-weight: 500; }
+
+    /* ══════════════════════════════════════
+       STATUS PILL
+    ══════════════════════════════════════ */
+    #status-bar {
+      position: fixed; top: calc(env(safe-area-inset-top, 44px) + 8px); left: 50%;
+      transform: translateX(-50%);
+      z-index: 400;
+      display: none; white-space: nowrap;
+      padding: 7px 16px;
+      border-radius: 30px;
+      font-size: 12px; font-weight: 700; letter-spacing: 0.2px;
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid rgba(255,255,255,0.1);
+      animation: pill-in 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    @keyframes pill-in {
+      from { transform: translateX(-50%) translateY(-10px) scale(0.9); opacity: 0; }
+      to   { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
+    }
+    #status-bar.visible { display: block; }
+    #status-bar.ok      { background: rgba(34,197,94,0.85); color: #fff; }
+    #status-bar.error   { background: rgba(239,68,68,0.85); color: #fff; }
+    #status-bar.warning { background: rgba(234,179,8,0.85); color: #000; }
+
+    /* ══════════════════════════════════════
+       MAP MARKERS
+    ══════════════════════════════════════ */
+    .pulse-ring {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(59,130,246,0.9);
+      border: 2.5px solid #fff;
+      box-shadow: 0 2px 12px rgba(59,130,246,0.6);
+      position: relative;
+    }
+    .pulse-ring::after {
+      content: ''; position: absolute;
+      inset: -6px; border-radius: 50%;
+      background: rgba(59,130,246,0.25);
+      animation: ring-pulse 2s ease-out infinite;
+    }
+    @keyframes ring-pulse {
+      0%   { transform: scale(1); opacity: 1; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    .person-bubble {
+      width: 40px; height: 40px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.9);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; font-weight: 700; color: #fff;
+    }
+
+    /* Leaflet popup */
+    .leaflet-popup-content-wrapper {
+      background: rgba(15,15,26,0.92) !important;
+      backdrop-filter: var(--blur) !important;
+      color: var(--text) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: var(--radius-sm) !important;
+      box-shadow: var(--shadow) !important;
+    }
+    .leaflet-popup-tip { background: rgba(15,15,26,0.92) !important; }
+    .leaflet-popup-content { margin: 12px 16px !important; font-size: 13px !important; color: var(--text2) !important; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--text4); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+<div class="map-vignette-top"></div>
+<div class="map-vignette-bot"></div>
+
+<!-- STATUS PILL -->
+<div id="status-bar"></div>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="header-inner">
+    <h1>Wo ist</h1>
+    <div class="header-actions">
+      <button class="icon-btn" id="btn-add-person" title="Person hinzufügen">＋</button>
+      <button class="icon-btn" id="btn-share-self" title="Meinen Standort teilen">⊕</button>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM PANEL -->
+<div id="panel">
+  <div id="panel-handle"></div>
+  <div id="panel-tabs">
+    <button class="tab-btn active" data-tab="people">Personen</button>
+    <button class="tab-btn" data-tab="me">Mein Standort</button>
+  </div>
+  <div id="panel-scroll">
+    <div id="tab-people">
+      <div class="empty-state" id="empty-people">
+        <div class="e-icon">👥</div>
+        Noch niemand teilt seinen Standort.<br>Tippe auf + um jemanden hinzuzufügen.
+      </div>
+      <div id="people-list"></div>
+    </div>
+    <div id="tab-me" style="display:none">
+      <div class="my-stat-card">
+        <div class="my-stat-row">
+          <div class="my-stat-icon" style="background:rgba(59,130,246,0.15)">📍</div>
+          <div><div class="my-stat-label">Aktueller Standort</div><div class="my-stat-value" id="my-address">Wird ermittelt…</div></div>
+        </div>
+        <div class="my-stat-row">
+          <div class="my-stat-icon" style="background:rgba(34,197,94,0.15)">🔋</div>
+          <div><div class="my-stat-label">Akku</div><div class="my-stat-value" id="my-battery">–</div></div>
+        </div>
+        <div class="my-stat-row">
+          <div class="my-stat-icon" style="background:rgba(234,179,8,0.15)">🕐</div>
+          <div><div class="my-stat-label">Zuletzt aktualisiert</div><div class="my-stat-value" id="my-last-update">–</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DETAIL BACKDROP -->
+<div id="detail-backdrop"></div>
+
+<!-- DETAIL PANEL -->
+<div id="detail-panel">
+  <div class="dp-handle"></div>
+  <button id="detail-close">✕</button>
+  <div id="detail-content">
+    <div class="dp-header">
+      <div class="dp-avatar" id="d-avatar">?</div>
+      <div>
+        <div class="dp-name" id="d-name">–</div>
+        <div class="dp-status">
+          <div class="dp-status-dot offline" id="d-status-dot"></div>
+          <span id="d-status">–</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-label">Standort</div>
+      <div class="dp-card">
+        <div class="dp-row">
+          <div class="dp-row-icon" style="background:rgba(59,130,246,0.15)">📍</div>
+          <div class="dp-row-body"><div class="dp-row-label">Adresse</div><div class="dp-row-value" id="d-address">–</div></div>
+        </div>
+        <div class="dp-row">
+          <div class="dp-row-icon" style="background:rgba(234,179,8,0.15)">🕐</div>
+          <div class="dp-row-body"><div class="dp-row-label">Zuletzt gesehen</div><div class="dp-row-value" id="d-time">–</div></div>
+        </div>
+        <div class="dp-row">
+          <div class="dp-row-icon" style="background:rgba(99,102,241,0.15)">🎯</div>
+          <div class="dp-row-body"><div class="dp-row-label">Genauigkeit</div><div class="dp-row-value" id="d-accuracy">–</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-label">Gerät</div>
+      <div class="dp-card">
+        <div class="dp-row">
+          <div class="dp-row-icon" style="background:rgba(34,197,94,0.15)">🔋</div>
+          <div class="dp-row-body"><div class="dp-row-label">Akku</div><div class="dp-row-value" id="d-battery">–</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dp-actions">
+      <button class="dp-btn primary" id="d-locate-btn">📍 Auf Karte</button>
+      <button class="dp-btn secondary" id="d-route-btn">🗺 Route</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SETUP SCREEN
+═══════════════════════════════════ -->
+<div id="setup-screen">
+  <div class="glow-orb glow-orb-1"></div>
+  <div class="glow-orb glow-orb-2"></div>
+
+  <div class="setup-icon-wrap">
+    <div class="setup-icon-bg">📍</div>
+  </div>
+  <div class="setup-title">Wo ist</div>
+  <div class="setup-sub">Teile deinen Standort mit der Familie – funktioniert auf iPhone &amp; Android.</div>
+
+  <button class="big-btn primary" id="btn-start-sharing">Meinen Standort teilen</button>
+  <button class="big-btn secondary" id="btn-join-room">Standort einer Person sehen</button>
+</div>
+
+<!-- ═══════════════════════════════════
+     SHARE SCREEN
+═══════════════════════════════════ -->
+<div id="share-screen">
+  <button class="screen-back" id="share-back">‹ Zurück</button>
+  <div class="share-title">Standort teilen</div>
+  <div class="share-sub">Sende diesen Code oder Link an deine Familie</div>
+
+  <input id="my-name-input" type="text" placeholder="Dein Name (z.B. Lena)" maxlength="20" />
+
+  <div class="qr-card">
+    <div id="qr-box"></div>
+    <div class="room-code-display" id="room-code-display">––––</div>
+    <div class="room-code-label">Code für Familie</div>
+  </div>
+
+  <div class="link-box" id="share-link-display">Wird geladen…</div>
+
+  <button class="big-btn primary" id="btn-copy-link">🔗&nbsp; Link kopieren</button>
+  <button class="big-btn secondary" id="btn-start-tracking">✓&nbsp; Standort jetzt teilen</button>
+</div>
+
+<!-- ═══════════════════════════════════
+     JOIN SCREEN
+═══════════════════════════════════ -->
+<div id="join-screen">
+  <button class="join-back" id="join-back">‹ Zurück</button>
+  <h2>Code eingeben</h2>
+  <p>Gib den 8-stelligen Code ein, den die andere Person mit dir geteilt hat.</p>
+  <input id="code-input" type="text" placeholder="AB12CD34" maxlength="8" autocomplete="off" />
+  <button class="big-btn primary" id="btn-join">Standort anzeigen</button>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════
+const S = {
+  roomId: null, role: null, myName: 'Ich',
+  ws: null, map: null,
+  myMarker: null, myCircle: null, myTrail: null, myTrailCoords: [],
+  people: {}, watchId: null, battery: null, myLat: null, myLng: null,
+};
+
+// ══════════════════════════════════════
+//  MAP
+// ══════════════════════════════════════
+function initMap() {
+  S.map = L.map('map', { center:[51.1657,10.4515], zoom:6, zoomControl:false, attributionControl:false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(S.map);
+  L.control.zoom({ position:'bottomright' }).addTo(S.map);
+  L.control.attribution({ position:'bottomleft', prefix:'© OpenStreetMap' }).addTo(S.map);
+}
+
+// ══════════════════════════════════════
+//  WEBSOCKET
+// ══════════════════════════════════════
+function connectWS(onOpen) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}`);
+  S.ws = ws;
+  ws.onopen = () => onOpen(ws);
+  ws.onmessage = (e) => handleMsg(JSON.parse(e.data));
+  ws.onclose = () => { showStatus('Verbindung getrennt…', 'error'); setTimeout(() => connectWS(onOpen), 3000); };
+}
+function send(o) { if (S.ws?.readyState === 1) S.ws.send(JSON.stringify(o)); }
+
+function handleMsg(msg) {
+  if (msg.type === 'joined') {
+    hideStatus();
+    if (msg.role === 'sharer') { showStatus('✓ Standort wird geteilt', 'ok'); setTimeout(hideStatus, 2500); }
+    else if (msg.role === 'viewer') showMainUI();
+  }
+  else if (msg.type === 'location') {
+    updatePerson(S.roomId, { lat:msg.lat, lng:msg.lng, accuracy:msg.accuracy, battery:msg.battery, timestamp:msg.timestamp, name:msg.name||'Unbekannt', online:true });
+  }
+  else if (msg.type === 'waiting') showStatus('Warte auf Standort…', 'warning');
+  else if (msg.type === 'sharer-offline') {
+    if (S.people[S.roomId]) { S.people[S.roomId].online = false; updatePersonCard(S.roomId); }
+    showStatus('Person ist offline', 'warning');
+  }
+  else if (msg.type === 'error') showStatus(msg.message, 'error');
+}
+
+// ══════════════════════════════════════
+//  TRACKING
+// ══════════════════════════════════════
+async function startTracking() {
+  if (!('geolocation' in navigator)) { showStatus('Geolocation nicht verfügbar', 'error'); return; }
+  if ('getBattery' in navigator) { try { S.battery = await navigator.getBattery(); } catch {} }
+  S.watchId = navigator.geolocation.watchPosition(pos => {
+    const { latitude:lat, longitude:lng, accuracy } = pos.coords;
+    S.myLat = lat; S.myLng = lng;
+    updateMyMarker(lat, lng, accuracy);
+    reverseGeocode(lat, lng).then(a => { document.getElementById('my-address').textContent = a; });
+    document.getElementById('my-last-update').textContent = fmtTime(new Date());
+    const batt = S.battery ? Math.round(S.battery.level * 100) : null;
+    document.getElementById('my-battery').textContent = batt ? batt + '%' : '–';
+    send({ type:'location', lat, lng, accuracy, battery:batt, name:S.myName });
+  }, err => showStatus('GPS-Fehler: ' + err.message, 'error'), { enableHighAccuracy:true, timeout:10000, maximumAge:5000 });
+}
+function stopTracking() { if (S.watchId != null) { navigator.geolocation.clearWatch(S.watchId); S.watchId = null; } }
+
+// ══════════════════════════════════════
+//  MY MARKER
+// ══════════════════════════════════════
+function updateMyMarker(lat, lng, acc) {
+  const ll = [lat, lng];
+  if (!S.myMarker) {
+    const icon = L.divIcon({ className:'', html:'<div class="pulse-ring"></div>', iconSize:[24,24], iconAnchor:[12,12] });
+    S.myMarker = L.marker(ll, { icon, zIndexOffset:1000 }).addTo(S.map);
+    S.myCircle = L.circle(ll, { radius:acc, color:'#3b82f6', fillColor:'#3b82f6', fillOpacity:0.06, weight:1 }).addTo(S.map);
+    S.map.setView(ll, 15);
+  } else {
+    S.myMarker.setLatLng(ll);
+    S.myCircle.setLatLng(ll).setRadius(acc);
+  }
+  S.myTrailCoords.push(ll);
+  if (S.myTrailCoords.length > 30) S.myTrailCoords.shift();
+  if (!S.myTrail) S.myTrail = L.polyline(S.myTrailCoords, { color:'#3b82f6', weight:2, opacity:0.4, dashArray:'5 5' }).addTo(S.map);
+  else S.myTrail.setLatLngs(S.myTrailCoords);
+}
+
+// ══════════════════════════════════════
+//  PEOPLE
+// ══════════════════════════════════════
+function updatePerson(id, data) {
+  if (!S.people[id]) S.people[id] = { trailCoords:[], marker:null, trail:null, circle:null };
+  const p = S.people[id];
+  Object.assign(p, data);
+  const ll = [data.lat, data.lng];
+  const col = nameColor(data.name || '?');
+  const ini = (data.name || '?')[0].toUpperCase();
+  if (!p.marker) {
+    const icon = L.divIcon({ className:'', html:`<div class="person-bubble" style="background:${col}">${ini}</div>`, iconSize:[40,40], iconAnchor:[20,20] });
+    p.marker = L.marker(ll, { icon, zIndexOffset:500 }).addTo(S.map).on('click', () => openDetail(id));
+    p.circle = L.circle(ll, { radius:data.accuracy||20, color:col, fillColor:col, fillOpacity:0.07, weight:1 }).addTo(S.map);
+    S.map.flyTo(ll, 15, { duration:1.5 });
+  } else {
+    p.marker.setLatLng(ll);
+    p.circle?.setLatLng(ll).setRadius(data.accuracy||20);
+  }
+  p.trailCoords.push(ll);
+  if (p.trailCoords.length > 20) p.trailCoords.shift();
+  if (!p.trail) p.trail = L.polyline(p.trailCoords, { color:col, weight:2, opacity:0.4, dashArray:'5 5' }).addTo(S.map);
+  else p.trail.setLatLngs(p.trailCoords);
+  reverseGeocode(data.lat, data.lng).then(a => {
+    p.address = a; updatePersonCard(id);
+    if (document.getElementById('detail-panel').dataset.pid === id) document.getElementById('d-address').textContent = a;
+  });
+  p.lastSeen = new Date();
+  updatePersonCard(id);
+  document.getElementById('empty-people').style.display = 'none';
+}
+
+function updatePersonCard(id) {
+  const p = S.people[id];
+  if (!p) return;
+  let card = document.getElementById(`card-${id}`);
+  const list = document.getElementById('people-list');
+  const col = nameColor(p.name || '?');
+  const ini = (p.name || '?')[0].toUpperCase();
+  const battCls = !p.battery ? '' : p.battery < 20 ? 'low' : p.battery < 50 ? 'mid' : 'full';
+  const battHtml = p.battery != null
+    ? `<span class="battery-pill ${battCls}">🔋 ${p.battery}%</span>`
+    : '';
+  const html = `
+    <div class="avatar-wrap">
+      <div class="avatar" style="background:${col}">${ini}</div>
+      <div class="status-dot ${p.online ? 'online' : 'offline'}"></div>
+    </div>
+    <div class="person-info">
+      <div class="person-name">${esc(p.name||'Unbekannt')}</div>
+      <div class="person-address">${esc(p.address||'Adresse wird ermittelt…')}</div>
+    </div>
+    <div class="person-meta">
+      <div class="person-time">${p.lastSeen ? fmtTime(p.lastSeen) : '–'}</div>
+      ${battHtml}
+    </div>`;
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'person-card'; card.id = `card-${id}`;
+    card.addEventListener('click', () => openDetail(id));
+    list.appendChild(card);
+  }
+  card.innerHTML = html;
+}
+
+// ══════════════════════════════════════
+//  DETAIL
+// ══════════════════════════════════════
+function openDetail(id) {
+  const p = S.people[id]; if (!p) return;
+  const col = nameColor(p.name||'?');
+  const ini = (p.name||'?')[0].toUpperCase();
+  document.getElementById('detail-panel').dataset.pid = id;
+  document.getElementById('d-avatar').textContent = ini;
+  document.getElementById('d-avatar').style.background = col;
+  document.getElementById('d-name').textContent = p.name||'Unbekannt';
+  const dot = document.getElementById('d-status-dot');
+  dot.className = 'dp-status-dot ' + (p.online ? 'online' : 'offline');
+  document.getElementById('d-status').textContent = p.online ? 'Online' : 'Offline – ' + (p.lastSeen ? fmtTime(p.lastSeen) : '–');
+  document.getElementById('d-address').textContent = p.address||'Wird ermittelt…';
+  document.getElementById('d-time').textContent = p.lastSeen ? fmtDateTime(p.lastSeen) : '–';
+  document.getElementById('d-accuracy').textContent = p.accuracy ? `±${Math.round(p.accuracy)} m` : '–';
+  document.getElementById('d-battery').textContent = p.battery != null ? `${p.battery}%` : '–';
+  const bd = document.getElementById('detail-backdrop');
+  const dp = document.getElementById('detail-panel');
+  bd.classList.add('open');
+  dp.style.display = 'block';
+  requestAnimationFrame(() => dp.classList.add('open'));
+  document.getElementById('d-locate-btn').onclick = () => { closeDetail(); if (p.marker) S.map.flyTo([p.lat,p.lng], 17, {duration:1}); };
+  document.getElementById('d-route-btn').onclick = () => window.open(`https://maps.apple.com/?daddr=${p.lat},${p.lng}`, '_blank');
+}
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('open');
+  document.getElementById('detail-backdrop').classList.remove('open');
+  setTimeout(() => { document.getElementById('detail-panel').style.display = 'none'; }, 400);
+}
+
+// ══════════════════════════════════════
+//  SCREENS
+// ══════════════════════════════════════
+function showMainUI() {
+  ['setup-screen'].forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+  document.getElementById('share-screen').classList.remove('open');
+  document.getElementById('join-screen').classList.remove('open');
+  document.getElementById('header').style.display = 'block';
+  document.getElementById('panel').style.display = 'block';
+}
+
+function showShareScreen(roomId) {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('share-screen').classList.add('open');
+  document.getElementById('room-code-display').textContent = roomId;
+  const link = `${location.origin}/?room=${roomId}`;
+  document.getElementById('share-link-display').textContent = link;
+  document.getElementById('qr-box').innerHTML = '';
+  new QRCode(document.getElementById('qr-box'), { text:link, width:144, height:144, colorDark:'#111', colorLight:'#fff', correctLevel:QRCode.CorrectLevel.M });
+}
+
+// ══════════════════════════════════════
+//  STATUS PILL
+// ══════════════════════════════════════
+let _st = null;
+function showStatus(msg, type='ok') {
+  const b = document.getElementById('status-bar');
+  b.textContent = msg; b.className = `visible ${type}`;
+  if (_st) clearTimeout(_st);
+}
+function hideStatus() {
+  document.getElementById('status-bar').classList.remove('visible');
+}
+
+// ══════════════════════════════════════
+//  GEOCODING
+// ══════════════════════════════════════
+const _gc = {};
+async function reverseGeocode(lat, lng) {
+  const k = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  if (_gc[k]) return _gc[k];
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=17&accept-language=de`);
+    const d = await r.json();
+    const a = d.address;
+    const parts = [a.road, a.house_number, a.city||a.town||a.village].filter(Boolean);
+    const res = parts.join(' ') || d.display_name?.split(',')[0] || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    return (_gc[k] = res);
+  } catch { return `${lat.toFixed(4)}, ${lng.toFixed(4)}`; }
+}
+
+// ══════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════
+function fmtTime(d) {
+  const s = (new Date() - d) / 1000;
+  if (s < 60) return 'Gerade eben';
+  if (s < 3600) return `vor ${Math.floor(s/60)} Min.`;
+  if (s < 86400) return `vor ${Math.floor(s/3600)} Std.`;
+  return d.toLocaleDateString('de-DE');
+}
+function fmtDateTime(d) {
+  return d.toLocaleString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function nameColor(n) {
+  const cols = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#10b981'];
+  let h = 0; for (let c of n) h = c.charCodeAt(0) + ((h<<5)-h);
+  return cols[Math.abs(h) % cols.length];
+}
+
+// ══════════════════════════════════════
+//  EVENTS
+// ══════════════════════════════════════
+document.getElementById('btn-start-sharing').addEventListener('click', async () => {
+  showStatus('Raum wird erstellt…', 'warning');
+  const { roomId } = await (await fetch('/api/create-room')).json();
+  S.roomId = roomId; S.role = 'sharer';
+  showShareScreen(roomId); hideStatus();
+});
+
+document.getElementById('btn-join-room').addEventListener('click', () => {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('join-screen').classList.add('open');
+});
+
+document.getElementById('share-back').addEventListener('click', () => {
+  document.getElementById('share-screen').classList.remove('open');
+  document.getElementById('setup-screen').style.display = 'flex';
+  stopTracking();
+});
+
+document.getElementById('btn-copy-link').addEventListener('click', () => {
+  const link = `${location.origin}/?room=${S.roomId}`;
+  navigator.clipboard.writeText(link).then(() => {
+    showStatus('✓ Link kopiert!', 'ok'); setTimeout(hideStatus, 2000);
+  }).catch(() => prompt('Link kopieren:', link));
+});
+
+document.getElementById('btn-start-tracking').addEventListener('click', () => {
+  S.myName = document.getElementById('my-name-input').value.trim() || 'Unbekannt';
+  showStatus('Verbinde…', 'warning');
+  connectWS(ws => { ws.send(JSON.stringify({ type:'join-sharer', roomId:S.roomId })); startTracking(); });
+  showMainUI();
+});
+
+document.getElementById('join-back').addEventListener('click', () => {
+  document.getElementById('join-screen').classList.remove('open');
+  document.getElementById('setup-screen').style.display = 'flex';
+});
+
+document.getElementById('btn-join').addEventListener('click', () => {
+  const code = document.getElementById('code-input').value.trim().toUpperCase();
+  if (code.length < 6) { showStatus('Bitte gültigen Code eingeben', 'error'); return; }
+  S.roomId = code; S.role = 'viewer';
+  showStatus('Verbinde…', 'warning');
+  connectWS(ws => ws.send(JSON.stringify({ type:'join-viewer', roomId:code })));
+  document.getElementById('join-screen').classList.remove('open');
+  showMainUI();
+});
+
+document.getElementById('code-input').addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+});
+
+document.getElementById('btn-add-person').addEventListener('click', () => {
+  document.getElementById('header').style.display = 'none';
+  document.getElementById('panel').style.display = 'none';
+  document.getElementById('join-screen').classList.add('open');
+});
+
+document.getElementById('btn-share-self').addEventListener('click', async () => {
+  if (S.role === 'sharer' && S.roomId) { showShareScreen(S.roomId); return; }
+  showStatus('Raum wird erstellt…', 'warning');
+  const { roomId } = await (await fetch('/api/create-room')).json();
+  S.roomId = roomId; S.role = 'sharer';
+  showShareScreen(roomId); hideStatus();
+});
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-people').style.display = btn.dataset.tab === 'people' ? 'block' : 'none';
+    document.getElementById('tab-me').style.display = btn.dataset.tab === 'me' ? 'block' : 'none';
+  });
+});
+
+document.getElementById('detail-close').addEventListener('click', closeDetail);
+document.getElementById('detail-backdrop').addEventListener('click', closeDetail);
+
+setInterval(() => Object.keys(S.people).forEach(updatePersonCard), 30000);
+
+// Service Worker
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+// ══════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════
+async function boot() {
+  initMap();
+  const params = new URLSearchParams(location.search);
+  const room = params.get('room');
+  if (room) {
+    S.roomId = room.toUpperCase(); S.role = 'viewer';
+    showStatus('Verbinde…', 'warning');
+    connectWS(ws => ws.send(JSON.stringify({ type:'join-viewer', roomId:S.roomId })));
+    showMainUI();
+  }
+}
+boot();
+</script>
+</body>
+</html>
